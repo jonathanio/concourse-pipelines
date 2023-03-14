@@ -1,0 +1,22 @@
+---
+version: 3
+output: prefixed
+interval: 1000ms
+
+tasks:
+  default:
+    desc: Run the default tasks
+    deps:
+      - task: pre-commit
+    cmds: []
+
+  pre-commit:
+    desc: Set up the pre-commit hook in this repository
+    internal: true
+    silent: true
+    cmds:
+      - pre-commit install
+    generates:
+      - .git/hooks/pre-commit
+    status:
+      - test -f .git/hooks/pre-commit
