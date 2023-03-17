@@ -1,12 +1,41 @@
 ---
+resource_types:
+  - name: github-webhook-resource
+    type: registry-image
+    source:
+      repository: homedepottech/github-webhook-resource
+      tag: latest
+
 resources:
+  - name: github-webhook
+    type: github-webhook-resource
+    source:
+      github_api: https://api.github.com
+      github_token: ((github-tokens.webhooks))
   - name: concourse-pipelines
     type: git
     icon: github
     source:
       uri: https://github.com/jonathanio/concourse-pipelines
+    check_every: 24h
+    webhook_token: bahpt2jeKRekdqgzoZp3xqHPRhR9AwCnuRDTNiomnb44n5yCOCM9DAp9ZnKz89ys
 
 jobs:
+  - name: pipelines-webhook
+    public: true
+    plan:
+      - put: create-webhook
+        resource: github-webhook
+        params:
+          org: jonathanio
+          repo: concourse-pipelines
+          resource_name: concourse-pipelines
+          webhook_token: bahpt2jeKRekdqgzoZp3xqHPRhR9AwCnuRDTNiomnb44n5yCOCM9DAp9ZnKz89ys
+          operation: create
+          events:
+            - push
+            - pull_request
+          pipeline: pipelines-setup
   - name: pipelines-setup
     public: true
     plan:

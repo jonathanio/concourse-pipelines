@@ -1,0 +1,203 @@
+---
+resources:
+  - name: aur-cloudflared-bin
+    type: git
+    icon: source-branch
+    source:
+      uri: https://aur.archlinux.org/cloudflared-bin.git
+      branch: master
+    check_every: 3h
+  - name: aur-terraform-docs-bin
+    type: git
+    icon: source-branch
+    source:
+      uri: https://aur.archlinux.org/terraform-docs-bin.git
+      branch: master
+    check_every: 3h
+  - name: aur-terraform-ls-bin
+    type: git
+    icon: source-branch
+    source:
+      uri: https://aur.archlinux.org/terraform-ls-bin.git
+      branch: master
+    check_every: 3h
+  - name: aur-concourse-scripts
+    type: git
+    icon: github
+    source:
+      uri: https://github.com/jonathanio/concourse-aur-scripts.git
+      branch: main
+    check_every: 5m
+  - name: arch-base-devel
+    type: registry-image
+    icon: arch
+    source:
+      repository: archlinux
+      tag: base-devel
+      username: ((docker/tokens/read-only.username))
+      password: ((docker/tokens/read-only.access-token))
+    check_every: 1h
+  - name: aur-repository
+    type: s3
+    source:
+      endpoint: https://e0d4aae3f32f077cd16bbc26f615738d.r2.cloudflarestorage.com
+      bucket: n3tuk-repo-arch
+      access_key_id: ((cloudflare/r2/n3tuk-repo-arch.access-key-id))
+      secret_access_key: ((cloudflare/r2/n3tuk-repo-arch.secret-access-key))
+
+groups:
+  - name: common
+    jobs:
+      - push-to-repo
+  - name: cloudflared
+    jobs:
+      - cloudflared-bin
+  - name: terraform
+    jobs:
+      - terraform-ls-bin
+      - terraform-docs-bin
+
+jobs:
+  - name: push-to-repo
+    serial: true
+    plan:
+      - in_parallel:
+          - get: aur-concourse-scripts
+            trigger: false
+          - get: arch-base-devel
+            trigger: false
+      - task: push-package
+        image: arch-base-devel
+        config:
+          platform: linux
+          inputs:
+            - name: aur-concourse-scripts
+              path: scripts
+          run:
+            path: echo
+            args:
+              - "Push to Repo"
+      - task: add-to-repository
+        image: arch-base-devel
+        config:
+          platform: linux
+          inputs:
+            - name: aur-concourse-scripts
+              path: scripts
+          run:
+            path: echo
+            args:
+              - "Add to Repository"
+
+  - name: cloudflared-bin
+    serial: true
+    plan:
+      - in_parallel:
+          - get: aur-cloudflared-bin
+            trigger: true
+            version: every
+          - get: aur-concourse-scripts
+            trigger: false
+          - get: arch-base-devel
+            trigger: false
+      - task: build-package
+        image: arch-base-devel
+        config:
+          platform: linux
+          inputs:
+            - name: aur-cloudflared-bin
+              path: build
+            - name: aur-concourse-scripts
+              path: scripts
+          outputs:
+            - name: packages
+              path: packages
+          run:
+            user: root
+            path: bash
+            args:
+              - scripts/build-package
+        ensure:
+          task: check-files
+          image: arch-base-devel
+          config:
+            platform: linux
+            inputs:
+              - name: aur-cloudflared-bin
+                path: build
+              - name: aur-concourse-scripts
+                path: scripts
+              - name: packages
+                path: packages
+            run:
+              path: find
+              args:
+                - -type
+                - f
+      - put: aur-repository
+        params:
+          file: packages/*.pkg.tar.*
+
+  - name: terraform-docs-bin
+    serial: true
+    plan:
+      - in_parallel:
+          - get: aur-terraform-docs-bin
+            trigger: true
+            version: every
+          - get: aur-concourse-scripts
+            trigger: false
+          - get: arch-base-devel
+            trigger: false
+      - task: build-package
+        image: arch-base-devel
+        config:
+          platform: linux
+          inputs:
+            - name: aur-terraform-docs-bin
+              path: build
+            - name: aur-concourse-scripts
+              path: scripts
+          outputs:
+            - name: packages
+              path: packages
+          run:
+            user: root
+            path: bash
+            args:
+              - scripts/build-package
+      - put: aur-repository
+        params:
+          file: packages/*.pkg.tar.*
+
+  - name: terraform-ls-bin
+    serial: true
+    plan:
+      - in_parallel:
+          - get: aur-terraform-ls-bin
+            trigger: true
+            version: every
+          - get: aur-concourse-scripts
+            trigger: false
+          - get: arch-base-devel
+            trigger: false
+      - task: build-package
+        image: arch-base-devel
+        config:
+          platform: linux
+          inputs:
+            - name: aur-terraform-ls-bin
+              path: build
+            - name: aur-concourse-scripts
+              path: scripts
+          outputs:
+            - name: packages
+              path: packages
+          run:
+            user: root
+            path: bash
+            args:
+              - scripts/build-package
+      - put: aur-repository
+        params:
+          file: packages/*.pkg.tar.*
